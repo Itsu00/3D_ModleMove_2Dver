@@ -123,6 +123,12 @@ namespace
 	}
 }
 
+CollisionRect MakeFloorRect(const MovingFloor& f)
+{
+	return { f.x - BLOCK_HALF_WIDTH, f.x + BLOCK_HALF_WIDTH,
+		f.y, f.y + BLOCK_SURFACE_HEIGHT };
+}
+
 Player::Player(GameObject* parent)
 	: GameObject(parent, "Player"),
 	hWalkModel_(-1),
@@ -136,7 +142,8 @@ Player::Player(GameObject* parent)
 	currentSpeed_(0.0f),
 	turnFrame_(0.0f),
 	jumpVelocity_(0.0f),
-	isGrounded_(true)
+	isGrounded_(true), 
+	ridingFloor_(-1)//これ増えた
 {
 }
 
@@ -447,6 +454,9 @@ void Player::UpdateJump()
 	const int mapHeight = static_cast<int>(gmap.size());
 	const CollisionRect before = MakePlayerRect(transform_.position_);
 
+	ridingFloor_ = -1;
+	const auto& floors = ground_->GetMovingFloors();
+
 	if (isGrounded_)
 	{
 		// 既存仕様の常設床。穴を作る場合はこの床もマップで管理する。
@@ -466,6 +476,19 @@ void Player::UpdateJump()
 				}
 			}
 		}
+		
+		for (int i = 0; i < (int)floors.size(); ++i)
+		{
+			const CollisionRect r = MakeFloorRect(floors[i]);
+			if (OverlapX(before, r) &&
+				std::fabs(before.bottom - r.top) <= CONTACT_EPSILON)
+			{
+				supported = true;
+				supportY = r.top + PLAYER_FOOT_OFFSET;
+				ridingFloor_ = i;
+			}
+		}
+
 		if (supported)
 		{
 			transform_.position_.y = supportY;
@@ -506,6 +529,31 @@ void Player::UpdateJump()
 				if (!hit || y < resolvedY) resolvedY = y;
 				hit = true;
 			}
+		}
+	}
+
+	for (int i = 0; i < (int)floors.size(); ++i)
+	{
+		const CollisionRect r = MakeFloorRect(floors[i]);
+		if (!OverlapX(after, r)) continue;
+
+		if (dy <= 0.0f &&
+			before.bottom >= r.top - floors[i].dy - CONTACT_EPSILON &&
+			after.bottom <= r.top)
+		{
+			// 上から着地
+			const float y = r.top + PLAYER_FOOT_OFFSET;
+			if (!hit || y > resolvedY) { resolvedY = y; ridingFloor_ = i; }
+			hit = true;
+		}
+		else if (dy > 0.0f &&
+			before.top <= r.bottom + CONTACT_EPSILON &&
+			after.top >= r.bottom)
+		{
+			// 下から頭をぶつける
+			const float y = r.bottom - PLAYER_HEIGHT + PLAYER_FOOT_OFFSET;
+			if (!hit || y < resolvedY) resolvedY = y;
+			hit = true;
 		}
 	}
 
@@ -566,6 +614,29 @@ void Player::ResolveWallCollision(XMVECTOR& pos, const XMVECTOR& move)
 			}
 		}
 	}
+
+	const auto& floors = ground_->GetMovingFloors();
+	for (int i = 0; i < (int)floors.size(); ++i)
+	{
+		const CollisionRect r = MakeFloorRect(floors[i]);
+		if (!OverlapY(before, r)) continue;
+
+		if (dx > 0.0f && before.right <= r.left + CONTACT_EPSILON &&
+			after.right >= r.left)
+		{
+			const float x = r.left - PLAYER_HALF_WIDTH;
+			if (!hit || x < resolvedX) resolvedX = x;
+			hit = true;
+		}
+		else if (dx < 0.0f && before.left >= r.right - CONTACT_EPSILON &&
+			after.left <= r.right)
+		{
+			const float x = r.right + PLAYER_HALF_WIDTH;
+			if (!hit || x > resolvedX) resolvedX = x;
+			hit = true;
+		}
+	}
+
 	if (hit)
 	{
 		transform_.position_.x = resolvedX;

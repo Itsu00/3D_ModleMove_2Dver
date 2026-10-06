@@ -14,6 +14,9 @@ public:
 	void Release() override;//開放
 	void SetGround(Ground* ground) { ground_ = ground; }
 	void OnCollision(GameObject* pTarget) override;
+
+	void Carry(float dx, float dy) { transform_.position_.x += dx; transform_.position_.y += dy; }
+	int GetRidingFloor() const { return ridingFloor_; }
 private:
 	// プレイヤーの状態
 	enum PLAYER_STATE
@@ -57,4 +60,6 @@ private:
 
 	float jumpVelocity_;						// ジャンプ中の垂直速度
 	bool isGrounded_;							// 地面に接地しているか
+
+	int ridingFloor_;	// 乗っている動く床の番号（-1なら無し）
 };

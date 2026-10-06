@@ -2,6 +2,9 @@
 #include "Engine/Model.h"
 #include "Engine/CsvReader.h"
 
+#include "Player.h"
+#include <cmath>
+
 namespace
 {
 	using std::vector;
@@ -28,6 +31,33 @@ Ground::Ground(GameObject* parent)
 			mapData_[y][x] = csvData.GetValue(x, y);//CSVの値をmapData_に格納
 		}
 	}
+
+	for (int y = 0; y < mapHeight_; y++) {
+		for (int x = 0; x < mapWidth_; x++) {
+			if (mapData_[y][x] == 3) {
+				AddMovingFloor(x * BLOCK_INTERVAL_X, (mapHeight_ - 1 - y) * BLOCK_INTERVAL_Y,
+					4.0f, 0.0f, 0.02f);	// 横に±4往復
+			}
+		}
+	}
+
+	for (int y = 0; y < mapHeight_; y++)
+	{
+		for (int x = 0; x < mapWidth_; x++)
+		{
+			float px = x * BLOCK_INTERVAL_X;
+			float py = (mapHeight_ - 1 - y) * BLOCK_INTERVAL_Y;
+
+			if (mapData_[y][x] == 3)
+			{
+				AddMovingFloor(px, py, 4.0f, 0.0f, 0.02f);	// 横に±4往復
+			}
+			else if (mapData_[y][x] == 4)
+			{
+				AddMovingFloor(px, py, 0.0f, 2.0f, 0.02f);	// 縦に±2往復
+			}
+		}
+	}
 }
 
 void Ground::Initialize()
@@ -36,7 +66,20 @@ void Ground::Initialize()
 	hModelt_ = Model::Load("Block.fbx");
 }
 
-void Ground::Update(){}
+void Ground::Update()
+{
+	Player* player = dynamic_cast<Player*>(FindObject("Player"));
+	for (int i = 0; i < (int)movingFloors_.size(); i++)
+	{
+		MovingFloor& f = movingFloors_[i];
+		f.t += f.speed;
+		f.dx = f.cx + f.ax * sinf(f.t) - f.x;
+		f.dy = f.cy + f.ay * sinf(f.t) - f.y;
+		f.x += f.dx;
+		f.y += f.dy;
+		if (player && player->GetRidingFloor() == i) player->Carry(f.dx, f.dy);
+	}
+}
 
 void Ground::Draw()
 {
@@ -56,6 +99,13 @@ void Ground::Draw()
 				Model::Draw(hModelt_);
 			}
 		}
+	}
+
+	for (const MovingFloor& f : movingFloors_){
+		Transform tr;
+		tr.position_ = { f.x, f.y, 0.0f };
+		Model::SetTransform(hModelt_, tr);
+		Model::Draw(hModelt_);
 	}
 }
 
